@@ -1,3 +1,5 @@
+import dataclasses
+
 from advanced_alchemy.extensions.litestar import SQLAlchemyAsyncConfig, SQLAlchemyPlugin
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,11 +14,17 @@ from litestar.params import FromQuery
 class Base(DeclarativeBase): ...
 
 
-class Person(Base):
+class PersonModel(Base):
     __tablename__ = "person"
 
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str]
+
+
+@dataclasses.dataclass
+class Person:
+    id: int
+    name: str
 
 
 # the paginator implements the same two methods as the in-memory example, but each one is
@@ -28,12 +36,12 @@ class PersonOffsetPaginator(AbstractAsyncOffsetPaginator[Person]):
         self.db_session = db_session
 
     async def get_total(self) -> int:
-        total = await self.db_session.scalar(select(func.count()).select_from(Person))
+        total = await self.db_session.scalar(select(func.count()).select_from(PersonModel))
         return total or 0
 
     async def get_items(self, limit: int, offset: int) -> list[Person]:
-        people = await self.db_session.scalars(select(Person).limit(limit).offset(offset))
-        return list(people)
+        people = await self.db_session.scalars(select(PersonModel).limit(limit).offset(offset))
+        return [Person(id=person.id, name=person.name) for person in people]
 
 
 # the paginator is provided as a dependency so that Litestar injects the request-scoped
@@ -55,7 +63,7 @@ sqlalchemy_config = SQLAlchemyAsyncConfig(
 async def on_startup() -> None:
     """Populate the in-memory database so the example returns data."""
     async with sqlalchemy_config.create_session_maker()() as db_session:
-        db_session.add_all([Person(name=f"Person {i}") for i in range(1, 51)])
+        db_session.add_all([PersonModel(name=f"Person {i}") for i in range(1, 51)])
         await db_session.commit()
 
 
